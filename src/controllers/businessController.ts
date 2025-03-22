@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { Business } from '../models/businessModel';
 import { User } from '../models/models';
 import { createAccount, generateOTP, otpStore, africastalking } from '../services/auth';
-import { sendToken } from '../services/token'; // Import sendToken for transfers
+import { sendToken } from '../services/token';
 import { handleError } from '../services/utils';
 import config from '../config/env';
 
@@ -31,6 +31,7 @@ export const requestBusinessCreation = async (req: Request, res: Response): Prom
       return res.status(409).send({ message: 'A business with this name already exists for this user.' });
     }
 
+    // Generate OTP for verification
     const otp = generateOTP();
     otpStore[phoneNumber] = otp;
 
@@ -59,7 +60,7 @@ export const completeBusinessCreation = async (req: Request, res: Response): Pro
   if (!otpStore[phoneNumber] || otpStore[phoneNumber] !== otp) {
     return res.status(400).send({ message: 'Invalid or expired OTP.' });
   }
-  delete otpStore[phoneNumber];
+  delete otpStore[phoneNumber]; // Clear OTP after verification
 
   try {
     const user = await User.findById(userId);
@@ -67,7 +68,8 @@ export const completeBusinessCreation = async (req: Request, res: Response): Pro
       return res.status(404).send({ message: 'User not found. Please create a personal account first.' });
     }
 
-    const { pk, walletAddress } = await createAccount('world'); // Unified wallet
+    // Create Business Wallet (default to World chain, unified across all chains)
+    const { pk, walletAddress } = await createAccount('world');
     const merchantId = generateMerchantId();
 
     const business = new Business({
@@ -76,10 +78,11 @@ export const completeBusinessCreation = async (req: Request, res: Response): Pro
       location,
       businessType,
       phoneNumber,
-      merchantId,
+      merchantId, // Borderless till number
       walletAddress,
       privateKey: pk,
       userId: user._id,
+      uniqueCode: merchantId, // Set uniqueCode to merchantId for tokenController.ts compatibility
     });
 
     await business.save();
@@ -88,6 +91,7 @@ export const completeBusinessCreation = async (req: Request, res: Response): Pro
       message: 'Business created successfully!',
       walletAddress,
       merchantId,
+      uniqueCode: merchantId, // Include in response for clarity
     });
   } catch (error) {
     console.error('❌ Error in completing business creation:', error);
@@ -119,7 +123,7 @@ export const transferFundsToPersonal = async (req: Request, res: Response): Prom
   if (!otpStore[user.phoneNumber] || otpStore[user.phoneNumber] !== otp) {
     return res.status(400).send({ message: 'Invalid or expired OTP.' });
   }
-  delete otpStore[user.phoneNumber];
+  delete otpStore[user.phoneNumber]; // Clear OTP after verification
 
   try {
     const result = await sendToken(user.walletAddress, amount, chain, business.privateKey);
@@ -128,6 +132,8 @@ export const transferFundsToPersonal = async (req: Request, res: Response): Prom
     return res.send({
       message: 'Funds transferred successfully!',
       transactionHash: result.transactionHash,
+      amount,
+      chain,
     });
   } catch (error) {
     console.error('❌ Error transferring funds:', error);
