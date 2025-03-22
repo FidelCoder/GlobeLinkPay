@@ -3,9 +3,10 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IBusiness extends Document {
   businessName: string;
   ownerName: string;
+  phoneNumber: string;
+  email: string;
   location: string;
   businessType: string;
-  phoneNumber: string;
   merchantId: string; // Borderless till number
   walletAddress: string;
   privateKey: string;
@@ -23,15 +24,19 @@ const businessSchema: Schema = new Schema({
     type: String,
     required: true,
   },
+  phoneNumber: {
+    type: String,
+    required: true,
+  },
+  email: {
+    type: String,
+    required: true,
+  },
   location: {
     type: String,
     required: true,
   },
   businessType: {
-    type: String,
-    required: true,
-  },
-  phoneNumber: {
     type: String,
     required: true,
   },
@@ -54,7 +59,7 @@ const businessSchema: Schema = new Schema({
     ref: 'User',
     required: true,
   },
-  uniqueCode: { // Added to match tokenController.ts
+  uniqueCode: {
     type: String,
     required: false,
     unique: true,

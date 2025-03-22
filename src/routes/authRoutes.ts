@@ -1,13 +1,12 @@
-import express from 'express';
-import { requestPasswordReset, resetPassword, loginUser, registerUser, initiateRegisterUser } from '../controllers/authController';
+import { Router } from 'express';
+import { initiateRegisterUser, registerUser, loginUser, requestPasswordReset, resetPassword } from '../controllers/authController';
 
-const router = express.Router();
+const router = Router();
 
-// Public routes (no authentication required)
-router.post('/initiate-register', initiateRegisterUser); // Matches /api/auth/initiate-register
-router.post('/register', registerUser);                  // Matches /api/auth/register
-router.post('/login', loginUser);                        // Matches /api/auth/login
-router.post('/request-password-reset', requestPasswordReset); // Matches /api/auth/request-password-reset
-router.post('/reset-password', resetPassword);           // Matches /api/auth/reset-password
+router.post('/initiate-register', initiateRegisterUser);
+router.post('/register', registerUser);
+router.post('/login', loginUser);
+router.post('/request-password-reset', requestPasswordReset);
+router.post('/reset-password', resetPassword);
 
 export default router;

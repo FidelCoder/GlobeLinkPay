@@ -14,6 +14,7 @@ import mpesaRoutes from './routes/mpesaRoutes';
 import { connect } from './services/database';
 import { Verification } from './models/verificationModel';
 import { client, africastalking } from './services/auth';
+import config from './config/env'; // Add this import
 
 const app: Application = express();
 const PORT = process.env.PORT || 8000;
@@ -96,7 +97,7 @@ connect()
       console.log(`Server running on http://localhost:${PORT}`);
       console.log('Thirdweb client initialized with secret key:', client ? 'present' : 'missing');
       console.log('Africa\'s Talking initialized:', africastalking.SMS ? 'present' : 'missing');
-      console.log('MongoDB URL:', process.env.MONGO_URL || 'not set in env');
+      console.log('MongoDB URL:', config.MONGO_URL || 'not set in env'); // Updated to config.MONGO_URL
     });
   })
   .catch((err: Error) => {
