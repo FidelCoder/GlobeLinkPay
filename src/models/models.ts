@@ -10,6 +10,7 @@ export interface IUser extends Document {
   failedPasswordAttempts: number;
   lockoutUntil?: number;
   isUnified: boolean; // Tracks if the wallet is unified across chains
+  chain: 'world' | 'zksync' | 'mantle'; // New field for chain identification
 }
 
 const userSchema: Schema = new Schema({
@@ -53,6 +54,12 @@ const userSchema: Schema = new Schema({
     type: Boolean,
     required: true,
     default: false, // Defaults to false until unified via /api/token/unify
+  },
+  chain: {
+    type: String,
+    enum: ['world', 'zksync', 'mantle'], // Restrict to supported chains
+    required: true,
+    default: 'world', // Default to World Chain
   },
 });
 

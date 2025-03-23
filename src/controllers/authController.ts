@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { createAccount, generateOTP, otpStore, africastalking, SALT_ROUNDS } from '../services/auth';
 import { handleError } from '../services/utils';
 import config from '../config/env';
+import { ethers } from 'ethers';
 
 export const initiateRegisterUser = async (req: Request, res: Response): Promise<Response> => {
   const { phoneNumber, password } = req.body;
@@ -201,5 +202,52 @@ export const resetPassword = async (req: Request, res: Response): Promise<Respon
     return res.send({ message: 'Password reset successfully. You can now login with your new password.' });
   } catch (error) {
     return handleError(error, res, 'Failed to reset password', 500);
+  }
+};
+
+// New endpoint: Transfer funds to another user by phone number
+export const transferFunds = async (req: Request, res: Response): Promise<Response> => {
+  const { toPhoneNumber, amount, tokenType = 'USDC' } = req.body; // tokenType defaults to USDC
+  const user = req.user; // From authenticateToken middleware
+
+  if (!toPhoneNumber || !amount) {
+    return res.status(400).send({ message: 'Recipient phone number and amount are required!' });
+  }
+
+  try {
+    const recipient = await User.findOne({ phoneNumber: toPhoneNumber });
+    if (!recipient) {
+      return res.status(404).send({ message: 'Recipient not found!' });
+    }
+
+    if (!user || !user._id) {
+      return res.status(401).send({ message: 'User not authenticated!' });
+    }
+
+    const sender = await User.findById(user._id);
+    if (!sender) {
+      return res.status(404).send({ message: 'Sender not found!' });
+    }
+
+    // Simulate transfer (replace with actual blockchain logic later)
+    const senderChain = sender.chain;
+    const recipientChain = recipient.chain;
+    if (senderChain !== recipientChain) {
+      return res.status(400).send({ message: 'Cross-chain transfers not yet supported!' });
+    }
+
+    const token = tokenType === 'USDC' ? 'USDC' : senderChain === 'world' ? 'WETH' : senderChain === 'zksync' ? 'ETH' : 'MNT';
+    console.log(`Transferring ${amount} ${token} from ${sender.phoneNumber} (${sender.walletAddress}) to ${recipient.phoneNumber} (${recipient.walletAddress}) on ${senderChain}`);
+
+    return res.send({
+      message: 'Transfer successful!',
+      from: sender.phoneNumber,
+      to: recipient.phoneNumber,
+      amount,
+      token,
+      chain: senderChain,
+    });
+  } catch (error) {
+    return handleError(error, res, 'Failed to transfer funds', 500);
   }
 };

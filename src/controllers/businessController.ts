@@ -100,7 +100,7 @@ export const completeBusinessCreation = async (req: Request, res: Response): Pro
 };
 
 export const transferFundsToPersonal = async (req: Request, res: Response): Promise<Response> => {
-  const { businessId, amount, chain, otp } = req.body;
+  const { businessId, amount, chain, otp } = req.body; // Fixed destructuring
   const user = req.user;
 
   if (!user || !businessId || !amount || !chain || !otp) {
@@ -134,5 +134,48 @@ export const transferFundsToPersonal = async (req: Request, res: Response): Prom
   } catch (error) {
     console.error('❌ Error transferring funds:', error);
     return handleError(error, res, 'Failed to transfer funds.');
+  }
+};
+
+// New endpoint: Pay a business by merchant ID
+export const payBusiness = async (req: Request, res: Response): Promise<Response> => {
+  const { merchantId, amount, tokenType = 'USDC' } = req.body;
+  const user = req.user;
+
+  if (!merchantId || !amount) {
+    return res.status(400).send({ message: 'Merchant ID and amount are required!' });
+  }
+
+  try {
+    const business = await Business.findOne({ merchantId });
+    if (!business) {
+      return res.status(404).send({ message: 'Business not found!' });
+    }
+
+    if (!user || !user._id) {
+      return res.status(401).send({ message: 'User not authenticated!' });
+    }
+
+    const sender = await User.findById(user._id);
+    if (!sender) {
+      return res.status(404).send({ message: 'Sender not found!' });
+    }
+
+    const senderChain = sender.chain;
+    const token = tokenType === 'USDC' ? 'USDC' : senderChain === 'world' ? 'WETH' : senderChain === 'zksync' ? 'ETH' : 'MNT';
+    console.log(`Paying ${amount} ${token} from ${sender.phoneNumber} (${sender.walletAddress}) to ${business.businessName} (${business.walletAddress}) on ${senderChain}`);
+
+    // Simulate payment (replace with actual blockchain logic later)
+    return res.send({
+      message: 'Payment successful!',
+      from: sender.phoneNumber,
+      to: business.businessName,
+      amount,
+      token,
+      merchantId,
+      chain: senderChain,
+    });
+  } catch (error) {
+    return handleError(error, res, 'Failed to pay business', 500);
   }
 };

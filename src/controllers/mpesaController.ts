@@ -65,17 +65,23 @@ export const mpesaWithdraw = async (req: Request, res: Response): Promise<Respon
       return res.status(400).send({ message: "Invalid chain. Use 'world', 'mantle', or 'zksync'" });
     }
 
+    // Fetch full User document to access privateKey
+    const currentUser = await User.findById(user._id);
+    if (!currentUser) {
+      return res.status(404).send({ message: 'User not found' });
+    }
+
     const conversionRate = await getConversionRateWithCaching();
     const convertedAmount = parseFloat(amount) / conversionRate;
 
     console.log('Withdrawing for user:', user.phoneNumber);
 
-    // Transfer USDC from user to platform wallet
+    // Transfer USDC from user to platform wallet using user's privateKey
     const tx = await sendToken(
       config.PLATFORM_WALLET_ADDRESS!,
       convertedAmount,
       chain,
-      user.privateKey!
+      currentUser.privateKey // Updated to use currentUser.privateKey
     );
 
     // Initiate B2C withdrawal (removing country code '254' from phone number)
