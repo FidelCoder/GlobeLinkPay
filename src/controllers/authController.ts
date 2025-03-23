@@ -70,7 +70,7 @@ export const registerUser = async (req: Request, res: Response): Promise<Respons
 
   try {
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-    const userSmartAccount = await createAccount('world'); // Default to World chain
+    const userSmartAccount = await createAccount('world');
     const { pk, walletAddress } = userSmartAccount;
 
     const newUser = new User({
@@ -82,7 +82,7 @@ export const registerUser = async (req: Request, res: Response): Promise<Respons
     await newUser.save();
 
     const token = jwt.sign(
-      { phoneNumber: newUser.phoneNumber, walletAddress: newUser.walletAddress },
+      { _id: newUser._id, phoneNumber: newUser.phoneNumber, walletAddress: newUser.walletAddress },
       config.JWT_SECRET || 'zero',
       { expiresIn: '1h' }
     );
@@ -117,7 +117,7 @@ export const loginUser = async (req: Request, res: Response): Promise<Response> 
     }
 
     const token = jwt.sign(
-      { phoneNumber: user.phoneNumber, walletAddress: user.walletAddress },
+      { _id: user._id, phoneNumber: user.phoneNumber, walletAddress: user.walletAddress },
       config.JWT_SECRET || 'zero',
       { expiresIn: '1h' }
     );
