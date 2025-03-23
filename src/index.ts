@@ -14,7 +14,7 @@ import mpesaRoutes from './routes/mpesaRoutes';
 import { connect } from './services/database';
 import { Verification } from './models/verificationModel';
 import { client, africastalking } from './services/auth';
-import config from './config/env'; // Add this import
+import config from './config/env';
 
 const app: Application = express();
 const PORT = process.env.PORT || 8000;
@@ -22,27 +22,24 @@ const PORT = process.env.PORT || 8000;
 // Security middlewares
 app.use(helmet());
 
-// Define allowed origins
+// Define allowed origins (kept for reference but not used)
 const allowedOrigins: string[] = [
-  'http://localhost:3000',
+  'http://localhost:3000', // Frontend dev origin
   'https://nexuspayapp-snowy.vercel.app',
   'https://app.nexuspayapp.xyz',
 ];
 
-// CORS middleware
+// CORS middleware with wildcard to allow all origins
 const corsOptions: CorsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  optionsSuccessStatus: 200,
+  origin: '*', // Allow requests from any origin
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Explicitly allow OPTIONS for pre-flight
+  allowedHeaders: ['Content-Type', 'Authorization'], // Match frontend headers
+  credentials: true, // Support cookies/auth if needed
+  optionsSuccessStatus: 200, // Ensure pre-flight success
 };
 app.use(cors(corsOptions));
 
-// Body parser middlewares
+// Body parser middlewares (before routes)
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -97,7 +94,7 @@ connect()
       console.log(`Server running on http://localhost:${PORT}`);
       console.log('Thirdweb client initialized with secret key:', client ? 'present' : 'missing');
       console.log('Africa\'s Talking initialized:', africastalking.SMS ? 'present' : 'missing');
-      console.log('MongoDB URL:', config.MONGO_URL || 'not set in env'); // Updated to config.MONGO_URL
+      console.log('MongoDB URL:', config.MONGO_URL || 'not set in env');
     });
   })
   .catch((err: Error) => {

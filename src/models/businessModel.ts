@@ -12,9 +12,10 @@ export interface IBusiness extends Document {
   privateKey: string;
   userId: mongoose.Types.ObjectId; // Reference to the User
   uniqueCode?: string; // Optional: Used in tokenController.ts for payments
+  chain: 'world' | 'mantle' | 'zksync'; // Add chain field
 }
 
-const businessSchema: Schema = new Schema({
+const businessSchema: Schema = new Schema<IBusiness>({
   businessName: {
     type: String,
     required: true,
@@ -63,6 +64,11 @@ const businessSchema: Schema = new Schema({
     type: String,
     required: false,
     unique: true,
+  },
+  chain: {
+    type: String,
+    enum: ['world', 'mantle', 'zksync'],
+    default: 'world', // Default to 'world' for consistency
   },
 });
 

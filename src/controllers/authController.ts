@@ -1,4 +1,5 @@
 import { User } from '../models/models';
+import { Transaction } from '../models/transactionModel';
 import bcrypt from 'bcrypt';
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
@@ -7,6 +8,30 @@ import { handleError } from '../services/utils';
 import config from '../config/env';
 import { ethers } from 'ethers';
 
+// Define chain type for type safety
+type Chain = 'world' | 'mantle' | 'zksync';
+
+// Mock PROVIDERS for simulation (no live RPCs)
+const PROVIDERS: Record<Chain, any> = {
+  world: { simulate: true },
+  mantle: { simulate: true },
+  zksync: { simulate: true },
+};
+
+// USDC Contract Addresses with explicit typing
+const USDC_ADDRESSES: Record<Chain, string> = {
+  world: '0x1c7D4B196Cb0C7B01d743fbc6116a902379C7238', // Sepolia USDC
+  mantle: '', // No standard USDC on Mantle Testnet; falls back to MNT
+  zksync: '0x05a9C1bC9F7359BF9DF8fED53fBCc66E59e...', // zkSync Testnet (incomplete; update if known)
+};
+
+// ERC20 ABI (minimal for transfer and balanceOf) - kept for reference
+const ERC20_ABI = [
+  'function transfer(address to, uint256 amount) public returns (bool)',
+  'function balanceOf(address account) public view returns (uint256)',
+];
+
+// Authentication-related functions
 export const initiateRegisterUser = async (req: Request, res: Response): Promise<Response> => {
   const { phoneNumber, password } = req.body;
 
@@ -57,10 +82,14 @@ export const initiateRegisterUser = async (req: Request, res: Response): Promise
 };
 
 export const registerUser = async (req: Request, res: Response): Promise<Response> => {
-  const { phoneNumber, password, otp } = req.body;
+  const { phoneNumber, password, otp, chain = 'world' } = req.body;
 
   if (!phoneNumber || !password || !otp) {
     return res.status(400).send({ message: 'Phone number, password, and OTP are required!' });
+  }
+
+  if (!['world', 'mantle', 'zksync'].includes(chain)) {
+    return res.status(400).send({ message: "Invalid chain. Use 'world', 'mantle', or 'zksync'" });
   }
 
   if (!otpStore[phoneNumber] || otpStore[phoneNumber] !== otp) {
@@ -71,7 +100,7 @@ export const registerUser = async (req: Request, res: Response): Promise<Respons
 
   try {
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-    const userSmartAccount = await createAccount('world');
+    const userSmartAccount = await createAccount(chain);
     const { pk, walletAddress } = userSmartAccount;
 
     const newUser = new User({
@@ -79,11 +108,12 @@ export const registerUser = async (req: Request, res: Response): Promise<Respons
       walletAddress,
       password: hashedPassword,
       privateKey: pk,
+      chain,
     });
     await newUser.save();
 
     const token = jwt.sign(
-      { _id: newUser._id, phoneNumber: newUser.phoneNumber, walletAddress: newUser.walletAddress },
+      { _id: newUser._id, phoneNumber: newUser.phoneNumber, walletAddress: newUser.walletAddress, chain: newUser.chain },
       config.JWT_SECRET || 'zero',
       { expiresIn: '1h' }
     );
@@ -93,6 +123,7 @@ export const registerUser = async (req: Request, res: Response): Promise<Respons
       message: 'Registered successfully!',
       walletAddress: newUser.walletAddress,
       phoneNumber: newUser.phoneNumber,
+      chain: newUser.chain,
     });
   } catch (error) {
     return handleError(error, res, 'Error registering user');
@@ -118,7 +149,7 @@ export const loginUser = async (req: Request, res: Response): Promise<Response> 
     }
 
     const token = jwt.sign(
-      { _id: user._id, phoneNumber: user.phoneNumber, walletAddress: user.walletAddress },
+      { _id: user._id, phoneNumber: user.phoneNumber, walletAddress: user.walletAddress, chain: user.chain },
       config.JWT_SECRET || 'zero',
       { expiresIn: '1h' }
     );
@@ -128,6 +159,7 @@ export const loginUser = async (req: Request, res: Response): Promise<Response> 
       message: 'Logged in successfully!',
       walletAddress: user.walletAddress,
       phoneNumber: user.phoneNumber,
+      chain: user.chain,
     });
   } catch (error) {
     return handleError(error, res, 'Failed to login');
@@ -205,49 +237,142 @@ export const resetPassword = async (req: Request, res: Response): Promise<Respon
   }
 };
 
-// New endpoint: Transfer funds to another user by phone number
+// Token Operation Functions
 export const transferFunds = async (req: Request, res: Response): Promise<Response> => {
-  const { toPhoneNumber, amount, tokenType = 'USDC' } = req.body; // tokenType defaults to USDC
-  const user = req.user; // From authenticateToken middleware
+  const { toPhoneNumber, amount, tokenType = 'native', chain } = req.body;
+  const user = req.user;
 
-  if (!toPhoneNumber || !amount) {
-    return res.status(400).send({ message: 'Recipient phone number and amount are required!' });
+  if (!toPhoneNumber || !amount || !chain) {
+    return res.status(400).send({ message: 'Recipient phone number, amount, and chain are required!' });
+  }
+
+  if (!['world', 'mantle', 'zksync'].includes(chain)) {
+    return res.status(400).send({ message: "Invalid chain. Use 'world', 'mantle', or 'zksync'" });
   }
 
   try {
     const recipient = await User.findOne({ phoneNumber: toPhoneNumber });
-    if (!recipient) {
-      return res.status(404).send({ message: 'Recipient not found!' });
-    }
-
-    if (!user || !user._id) {
-      return res.status(401).send({ message: 'User not authenticated!' });
-    }
+    if (!recipient) return res.status(404).send({ message: 'Recipient not found!' });
+    if (!user || !user._id) return res.status(401).send({ message: 'User not authenticated!' });
 
     const sender = await User.findById(user._id);
-    if (!sender) {
-      return res.status(404).send({ message: 'Sender not found!' });
+    if (!sender) return res.status(404).send({ message: 'Sender not found!' });
+
+    if (sender.chain !== chain || recipient.chain !== chain) {
+      return res.status(400).send({ message: 'Sender and recipient must be on the same chain for this transfer. Use cross-chain transfer instead.' });
     }
 
-    // Simulate transfer (replace with actual blockchain logic later)
-    const senderChain = sender.chain;
-    const recipientChain = recipient.chain;
-    if (senderChain !== recipientChain) {
-      return res.status(400).send({ message: 'Cross-chain transfers not yet supported!' });
-    }
+    const token = tokenType === 'USDC' && USDC_ADDRESSES[chain as Chain] ? 'USDC' : chain === 'world' ? 'WETH' : chain === 'mantle' ? 'MNT' : 'ETH';
+    const txHash = `SIMULATED-TX-${chain}-${Date.now()}`; // Simulated transaction hash
 
-    const token = tokenType === 'USDC' ? 'USDC' : senderChain === 'world' ? 'WETH' : senderChain === 'zksync' ? 'ETH' : 'MNT';
-    console.log(`Transferring ${amount} ${token} from ${sender.phoneNumber} (${sender.walletAddress}) to ${recipient.phoneNumber} (${recipient.walletAddress}) on ${senderChain}`);
-
-    return res.send({
-      message: 'Transfer successful!',
+    const transaction = new Transaction({
       from: sender.phoneNumber,
       to: recipient.phoneNumber,
       amount,
       token,
-      chain: senderChain,
+      chain,
+      transactionHash: txHash,
+      type: 'transfer',
+    });
+    await transaction.save();
+
+    console.log(`✅ Simulated Transfer: ${amount} ${token} from ${sender.phoneNumber} to ${recipient.phoneNumber} on ${chain}`);
+    return res.send({
+      message: 'Transfer successful (simulated)!',
+      from: sender.phoneNumber,
+      to: recipient.phoneNumber,
+      amount,
+      token,
+      chain,
+      transactionHash: txHash,
     });
   } catch (error) {
+    console.error('Failed to transfer funds:', error);
     return handleError(error, res, 'Failed to transfer funds', 500);
+  }
+};
+
+export const getBalance = async (req: Request, res: Response): Promise<Response> => {
+  const { chain, tokenType = 'native' } = req.body;
+  const user = req.user;
+
+  if (!chain || !user) {
+    return res.status(400).send({ message: 'Chain and user authentication are required!' });
+  }
+
+  if (!['world', 'mantle', 'zksync'].includes(chain)) {
+    return res.status(400).send({ message: "Invalid chain. Use 'world', 'mantle', or 'zksync'" });
+  }
+
+  try {
+    const sender = await User.findById(user._id);
+    if (!sender) return res.status(404).send({ message: 'User not found!' });
+
+    const token = tokenType === 'USDC' && USDC_ADDRESSES[chain as Chain] ? 'USDC' : chain === 'world' ? 'WETH' : chain === 'mantle' ? 'MNT' : 'ETH';
+    const balance = "1.0"; // Simulated balance for demo
+
+    console.log(`✅ Simulated Balance for ${sender.phoneNumber}: ${balance} ${token} on ${chain}`);
+    return res.send({
+      message: 'Balance retrieved successfully (simulated)!',
+      phoneNumber: sender.phoneNumber,
+      walletAddress: sender.walletAddress,
+      balance,
+      token,
+      chain,
+    });
+  } catch (error) {
+    console.error('Failed to get balance:', error);
+    return handleError(error, res, 'Failed to get balance', 500);
+  }
+};
+
+export const transferCrossChain = async (req: Request, res: Response): Promise<Response> => {
+  const { toPhoneNumber, amount, tokenType = 'native', fromChain, toChain } = req.body;
+  const user = req.user;
+
+  if (!toPhoneNumber || !amount || !fromChain || !toChain) {
+    return res.status(400).send({ message: 'Recipient phone number, amount, fromChain, and toChain are required!' });
+  }
+
+  if (!['world', 'mantle', 'zksync'].includes(fromChain) || !['world', 'mantle', 'zksync'].includes(toChain)) {
+    return res.status(400).send({ message: "Invalid chain. Use 'world', 'mantle', or 'zksync'" });
+  }
+
+  try {
+    const recipient = await User.findOne({ phoneNumber: toPhoneNumber });
+    if (!recipient) return res.status(404).send({ message: 'Recipient not found!' });
+    if (!user || !user._id) return res.status(401).send({ message: 'User not authenticated!' });
+
+    const sender = await User.findById(user._id);
+    if (!sender) return res.status(404).send({ message: 'Sender not found!' });
+
+    const token = tokenType === 'USDC' ? 'USDC' : fromChain === 'world' ? 'WETH' : fromChain === 'mantle' ? 'MNT' : 'ETH';
+    const txHash = `SIMULATED-CROSS-CHAIN-TX-${fromChain}-to-${toChain}-${Date.now()}`;
+
+    const transaction = new Transaction({
+      from: sender.phoneNumber,
+      to: recipient.phoneNumber,
+      amount,
+      token,
+      chain: `${fromChain} -> ${toChain}`,
+      transactionHash: txHash,
+      type: 'crosschain',
+    });
+    await transaction.save();
+
+    console.log(`✅ Simulated Cross-Chain Transfer: ${amount} ${token} from ${sender.phoneNumber} to ${recipient.phoneNumber} from ${fromChain} to ${toChain}`);
+    return res.send({
+      message: 'Cross-chain transfer successful (simulated)!',
+      from: sender.phoneNumber,
+      to: recipient.phoneNumber,
+      amount,
+      token,
+      fromChain,
+      toChain,
+      transactionHash: txHash,
+    });
+  } catch (error) {
+    console.error('Failed to process cross-chain transfer:', error);
+    return handleError(error, res, 'Failed to process cross-chain transfer', 500);
   }
 };

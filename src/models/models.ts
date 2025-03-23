@@ -10,10 +10,10 @@ export interface IUser extends Document {
   failedPasswordAttempts: number;
   lockoutUntil?: number;
   isUnified: boolean; // Tracks if the wallet is unified across chains
-  chain: 'world' | 'zksync' | 'mantle'; // New field for chain identification
+  chain: 'world' | 'mantle' | 'zksync'; // Updated order for consistency
 }
 
-const userSchema: Schema = new Schema({
+const userSchema: Schema = new Schema<IUser>({
   phoneNumber: {
     type: String,
     required: true,
@@ -57,7 +57,7 @@ const userSchema: Schema = new Schema({
   },
   chain: {
     type: String,
-    enum: ['world', 'zksync', 'mantle'], // Restrict to supported chains
+    enum: ['world', 'mantle', 'zksync'], // Updated order to match businessController.ts
     required: true,
     default: 'world', // Default to World Chain
   },
